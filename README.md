@@ -2,6 +2,10 @@
 
 # uv-helper
 
+动机
+
+uv是python世界很棒的一个项目管理工具，可以解决创建python工程、管理包依赖、运行及发布一系列问题。有一些使用问题比较别扭，运行项目脚本必须执行 `uv run python xxx.py`，兼容历史遗留项目还需要执行诸如 `uv run pip install --requirements.txt` 等操作， 需要修改构建脚本等一些列调整。有一种解决办法 在 uv 项目文件夹手动执行`source .venv/bin/activate`, 还是有些重复、枯燥和乏味。有没有自动化的办法呢？基于这些问题，受 mise 项目的启发，开发了这么一个工具。实现了进入 uv 项目文件夹自动激活虚拟环境、离开 uv 项目文件夹自动注销虚拟环境。释放了工程师的双手。 
+
 `uv-helper` 是一个单文件 Go 工具，用于在进入或离开包含 Python 虚拟环境（例如 `.venv`）的目录时，自动产生命令片段由 shell `eval`/`Invoke-Expression` 执行，从而激活或撤销虚拟环境。支持 macOS/Linux（bash、zsh、fish）和 Windows（PowerShell、cmd）。
 
 构建
