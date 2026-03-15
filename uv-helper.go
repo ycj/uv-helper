@@ -211,7 +211,7 @@ func installForShell(shell, exePath, target string, yes, backup, force, dryRun b
 		os.Exit(2)
 	}
 	if target != "" {
-		cfg = target
+		cfg = expandPath(target)
 	}
 
 	snippet := generateInstallSnippet(shell, exePath)
@@ -286,17 +286,81 @@ func confirmPrompt(prompt string) bool {
 	return s == "y" || s == "yes"
 }
 
+func expandPath(p string) string {
+	if strings.HasPrefix(p, "~/") {
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, p[2:])
+	}
+	if p == "~" {
+		home, _ := os.UserHomeDir()
+		return home
+	}
+	return p
+}
+
 func generateInstallSnippet(shell, exePath string) string {
-	// make exe path safe for shells
 	exe := exePath
 	switch shell {
-	case "zsh", "bash":
-		// Use a robust snippet that handles both zsh and bash. Use double quotes around exe for safety.
-		return fmt.Sprintf("# >>> uv-helper init >>>\n# added by uv-helper\nuv_auto() { eval \"$(\"%s\" shell %s \"$PWD\")\"; }\nif type add-zsh-hook >/dev/null 2>&1; then\n  autoload -U add-zsh-hook\n  add-zsh-hook chpwd uv_auto\nfi\n# run once\nuv_auto\n# <<< uv-helper init <<<", exe, shell)
+	case "zsh":
+		// Zsh snippet: use precmd hook (always available, no add-zsh-hook needed)
+		// plus chpwd_functions array (native zsh, no autoload required).
+		// This avoids: 1) broken add-zsh-hook dependency  2) cd-wrapper conflicts
+		// precmd runs before each prompt; chpwd runs on directory change.
+		return fmt.Sprintf(`# >>> uv-helper init >>>
+# added by uv-helper
+_uv_helper_hook() {
+  eval "$('%s' shell zsh "$PWD")"
+}
+# register via chpwd_functions (native zsh array, no autoload needed)
+if [[ -z "${_uv_helper_registered}" ]]; then
+  chpwd_functions=(_uv_helper_hook $chpwd_functions)
+  _uv_helper_registered=1
+fi
+# run once for the initial directory
+_uv_helper_hook
+# <<< uv-helper init <<<`, exe)
+	case "bash":
+		// Bash snippet: use PROMPT_COMMAND (runs before each prompt).
+		// This avoids wrapping cd which can conflict with other tools.
+		return fmt.Sprintf(`# >>> uv-helper init >>>
+# added by uv-helper
+_uv_helper_hook() {
+  eval "$('%s' shell bash "$PWD")"
+}
+# append to PROMPT_COMMAND (bash 5.1+ supports array; use string concat for compat)
+if [[ ! "$PROMPT_COMMAND" == *"_uv_helper_hook"* ]]; then
+  PROMPT_COMMAND="_uv_helper_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+fi
+# run once for the initial directory
+_uv_helper_hook
+# <<< uv-helper init <<<`, exe)
 	case "fish":
-		return fmt.Sprintf("# >>> uv-helper init >>>\n# added by uv-helper\nfunction chpwd\n  eval ( %s shell fish $PWD )\nend\n# run once\neval ( %s shell fish $PWD )\n# <<< uv-helper init <<<", exe, exe)
+		// Fish snippet: use --on-variable PWD event (fires on directory change)
+		return fmt.Sprintf(`# >>> uv-helper init >>>
+# added by uv-helper
+function _uv_helper_hook --on-variable PWD
+  eval ('%s' shell fish "$PWD")
+end
+# run once for the initial directory
+eval ('%s' shell fish "$PWD")
+# <<< uv-helper init <<<`, exe, exe)
 	case "powershell":
-		return fmt.Sprintf("# >>> uv-helper init >>>\n# added by uv-helper\nfunction Set-Location { param($Path) Microsoft.PowerShell.Management\\Set-Location $Path; Invoke-Expression (& \"%s\" shell powershell $PWD) }\n# run once\nInvoke-Expression (& \"%s\" shell powershell $PWD)\n# <<< uv-helper init <<<", exe, exe)
+		// PowerShell snippet: use prompt function wrapper to detect directory changes
+		return fmt.Sprintf(`# >>> uv-helper init >>>
+# added by uv-helper
+$global:__uv_helper_last_dir = $null
+$global:__uv_helper_orig_prompt = $function:prompt
+function global:prompt {
+  $curDir = (Get-Location).Path
+  if ($curDir -ne $global:__uv_helper_last_dir) {
+    $global:__uv_helper_last_dir = $curDir
+    Invoke-Expression (& "%s" shell powershell $curDir)
+  }
+  if ($global:__uv_helper_orig_prompt) { & $global:__uv_helper_orig_prompt } else { "PS> " }
+}
+# run once for the initial directory
+Invoke-Expression (& "%s" shell powershell $PWD)
+# <<< uv-helper init <<<`, exe, exe)
 	case "cmd":
 		return fmt.Sprintf("rem >>> uv-helper init >>>\nrem added by uv-helper\nrem To use uv-helper in cmd, run: call \"%s\" shell cmd %%CD%%\nrem <<< uv-helper init <<<", exe)
 	}
@@ -322,7 +386,7 @@ func uninstallForShell(shell, target string, yes, backup, force, dryRun bool) {
 		os.Exit(2)
 	}
 	if target != "" {
-		cfg = target
+		cfg = expandPath(target)
 	}
 
 	if !existsFile(cfg) {
