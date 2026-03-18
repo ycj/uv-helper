@@ -21,20 +21,26 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
 
-      - name: Build uv-helper
-        run: |
-          go build -ldflags "-X main.Version=${{ github.ref_name }}" -o uv-helper-${{ matrix.os }}-${{ matrix.go }}.exe uv-helper.go
-
-      - name: Archive build
-        if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: uv-helper-${{ matrix.os }}-${{ matrix.go }}
-          path: uv-helper-${{ matrix.os }}-${{ matrix.go }}.exe
-
-      - name: Archive build (unix)
+      - name: Build (Linux / macOS)
         if: runner.os != 'Windows'
+        run: |
+          set -e
+          mkdir -p build artifacts
+          go build -ldflags "-X main.Version=${{ github.ref_name }}" -o build/uv-helper-${{ runner.os }}-${{ matrix.go }} uv-helper.go
+          tar -C build -czf ../artifacts/uv-helper-${{ matrix.go }}-${{ runner.os | toLower }}.tar.gz uv-helper-${{ runner.os }}-${{ matrix.go }}
+        shell: bash
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          New-Item -ItemType Directory -Path build -Force | Out-Null
+          New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+          go build -ldflags "-X main.Version=${{ github.ref_name }}" -o build\uv-helper-windows-${{ matrix.go }}.exe uv-helper.go
+          Compress-Archive -Path build\uv-helper-windows-${{ matrix.go }}.exe -DestinationPath artifacts\uv-helper-${{ matrix.go }}-windows.zip -Force
+        shell: pwsh
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: uv-helper-${{ matrix.os }}-${{ matrix.go }}
-          path: uv-helper-${{ matrix.os }}-${{ matrix.go }}
+          name: uv-helper-artifacts-${{ matrix.os }}-${{ matrix.go }}
+          path: artifacts/
