@@ -27,8 +27,8 @@ jobs:
         run: |
           set -e
           mkdir -p build artifacts
-          go build -ldflags "-X main.Version=${{ github.ref_name }}" -o build/uv-helper-${{ matrix.os }}-${{ matrix.go }} uv-helper.go
-          tar -C build -czf artifacts/uv-helper-${{ matrix.os }}-${{ matrix.go }}.tar.gz uv-helper-${{ matrix.os }}-${{ matrix.go }}
+          go build -ldflags "-X main.Version=${{ github.ref_name }}" -o build/uv-helper-${{ matrix.os }}-${{ github.ref_name }} uv-helper.go
+          tar -C build -czf artifacts/uv-helper-${{ matrix.os }}-${{ github.ref_name }}.tar.gz uv-helper-${{ matrix.os }}-${{ github.ref_name }}
         shell: bash
 
       - name: Build (Windows)
@@ -36,8 +36,8 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path build -Force | Out-Null
           New-Item -ItemType Directory -Path artifacts -Force | Out-Null
-          go build -ldflags "-X main.Version=${{ github.ref_name }}" -o build\uv-helper-windows-${{ matrix.go }}.exe uv-helper.go
-          Compress-Archive -Path build\uv-helper-windows-${{ matrix.go }}.exe -DestinationPath artifacts\uv-helper-${{ matrix.go }}-windows.zip -Force
+          go build -ldflags "-X main.Version=${{ github.ref_name }}" -o build\uv-helper-windows-${{ github.ref_name }}.exe uv-helper.go
+          Compress-Archive -Path build\uv-helper-windows-${{ github.ref_name }}.exe -DestinationPath artifacts\uv-helper-windows-${{ github.ref_name }}.zip -Force
         shell: pwsh
 
       - name: Upload artifacts
