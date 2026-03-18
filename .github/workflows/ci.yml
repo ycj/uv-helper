@@ -40,9 +40,10 @@ jobs:
         shell: pwsh
 
       - name: Upload artifacts
+        if: matrix.go == '1.21'
         uses: actions/upload-artifact@v4
         with:
-          name: uv-helper-artifacts-${{ matrix.os }}-${{ matrix.go }}
+          name: uv-helper-artifacts-${{ matrix.os }}
           path: artifacts/
 
   release:
