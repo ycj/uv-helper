@@ -16,6 +16,25 @@ go build -o uv-helper uv-helper.go
 sudo mv uv-helper /usr/local/bin/
 ```
 
+版本注入（构建时设置）
+
+`uv-helper` 在源码中定义了 `Version` 变量，默认值为 `0.1.0`，可以在构建时通过 `-ldflags` 注入自定义版本号（常用于 CI/CD 构建）。示例：
+
+```bash
+# 在构建时注入版本号为 2.3.4
+go build -ldflags "-X main.Version=2.3.4" -o uv-helper-2.3.4.exe uv-helper.go
+# 运行验证版本
+.\/uv-helper-2.3.4.exe -V
+# 输出: 2.3.4
+```
+
+在 CI 中，你可以把版本号从 git tag 或构建号传入：
+
+```bash
+go build -ldflags "-X main.Version=$(git describe --tags --dirty)" -o uv-helper
+```
+
+
 快速用法
 
 基础命令：

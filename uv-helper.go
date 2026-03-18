@@ -9,7 +9,15 @@ import (
 	"time"
 )
 
+// Version is the program version. Can be overridden at build time via ldflags.
+var Version = "0.1.0"
+
 func main() {
+	if len(os.Args) >= 2 && (os.Args[1] == "-V" || os.Args[1] == "--version") {
+		fmt.Println(Version)
+		os.Exit(0)
+	}
+
 	if len(os.Args) < 2 {
 		usageAndExit()
 	}
@@ -82,7 +90,7 @@ func main() {
 }
 
 func usageAndExit() {
-	fmt.Fprintf(os.Stderr, "usage:\n  %s shell <bash|zsh|fish|powershell|cmd> <cwd>\n  %s install <shell> [--yes] [--target=/path/to/config] [--no-backup] [--force] [--dry-run]\n  %s uninstall <shell> [--yes] [--target=/path/to/config] [--no-backup] [--force] [--dry-run]\n", os.Args[0], os.Args[0], os.Args[0])
+	fmt.Fprintf(os.Stderr, "usage:\n  %s -V|--version\n  %s shell <bash|zsh|fish|powershell|cmd> <cwd>\n  %s install <shell> [--yes] [--target=/path/to/config] [--no-backup] [--force] [--dry-run]\n  %s uninstall <shell> [--yes] [--target=/path/to/config] [--no-backup] [--force] [--dry-run]\n", os.Args[0], os.Args[0], os.Args[0], os.Args[0])
 	os.Exit(2)
 }
 
