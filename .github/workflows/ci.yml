@@ -26,8 +26,8 @@ jobs:
         run: |
           set -e
           mkdir -p build artifacts
-          go build -ldflags "-X main.Version=${{ github.ref_name }}" -o build/uv-helper-${{ runner.os }}-${{ matrix.go }} uv-helper.go
-          tar -C build -czf ../artifacts/uv-helper-${{ matrix.go }}-${{ runner.os | toLower }}.tar.gz uv-helper-${{ runner.os }}-${{ matrix.go }}
+          go build -ldflags "-X main.Version=${{ github.ref_name }}" -o build/uv-helper-${{ matrix.os }}-${{ matrix.go }} uv-helper.go
+          tar -C build -czf artifacts/uv-helper-${{ matrix.os }}-${{ matrix.go }}.tar.gz uv-helper-${{ matrix.os }}-${{ matrix.go }}
         shell: bash
 
       - name: Build (Windows)
