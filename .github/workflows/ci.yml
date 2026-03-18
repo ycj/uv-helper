@@ -44,3 +44,28 @@ jobs:
         with:
           name: uv-helper-artifacts-${{ matrix.os }}-${{ matrix.go }}
           path: artifacts/
+
+  release:
+    name: Create Release and upload artifacts
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && needs.build.result == 'success'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List downloaded files
+        run: |
+          echo "Downloaded files:" && ls -la artifacts || true
+
+      - name: Create GitHub Release and upload artifacts
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          files: artifacts/**
