@@ -203,7 +203,19 @@ func installForShell(shell, exePath, target string, yes, backup, force, dryRun b
 	case "fish":
 		cfg = filepath.Join(home, ".config", "fish", "config.fish")
 	case "powershell":
-		cfg = filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+		// Install to both Windows PowerShell (5.x) and PowerShell 7+ profiles
+		if target == "" {
+			cfgs := []string{
+				filepath.Join(home, "Documents", "WindowsPowerShell", "Microsoft.PowerShell_profile.ps1"),
+				filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1"),
+			}
+			snippet := generateInstallSnippet(shell, exePath)
+			for _, c := range cfgs {
+				installSnippetToFile(c, snippet, yes, backup, force, dryRun)
+			}
+			return
+		}
+		cfg = expandPath(target)
 	case "cmd":
 		cfg = filepath.Join(home, "_uv_helper_cmd.bat")
 	default:
@@ -215,62 +227,7 @@ func installForShell(shell, exePath, target string, yes, backup, force, dryRun b
 	}
 
 	snippet := generateInstallSnippet(shell, exePath)
-
-	// ensure directory exists
-	os.MkdirAll(filepath.Dir(cfg), 0o755)
-
-	// check if already installed
-	if existsFile(cfg) {
-		data, _ := os.ReadFile(cfg)
-		if strings.Contains(string(data), "# >>> uv-helper init >>>") && !force {
-			fmt.Printf("uv-helper already installed in %s (use --force to append anyway)\n", cfg)
-			return
-		}
-	}
-
-	if dryRun || !yes {
-		action := "append"
-		if dryRun {
-			action = "(dry-run) append"
-		}
-		fmt.Printf("Would %s the following snippet to: %s\n---BEGIN SNIPPET---\n%s---END SNIPPET---\n", action, cfg, snippet)
-		if dryRun {
-			return
-		}
-		if !yes {
-			// interactive prompt
-			if !confirmPrompt(fmt.Sprintf("Append snippet to %s? [y/N]: ", cfg)) {
-				fmt.Println("Aborted")
-				return
-			}
-		}
-	}
-
-	// create centralized backup if requested
-	if backup && existsFile(cfg) {
-		home, _ := os.UserHomeDir()
-		bdir := filepath.Join(home, ".uv-helper", "backups")
-		_ = os.MkdirAll(bdir, 0o755)
-		ts := time.Now().Format("20060102T150405")
-		base := filepath.Base(cfg)
-		safe := strings.ReplaceAll(base, string(filepath.Separator), "_")
-		bak := filepath.Join(bdir, safe+"."+ts+".bak")
-		_ = os.WriteFile(bak, mustReadFile(cfg), 0o644)
-		fmt.Printf("Backup created: %s\n", bak)
-	}
-
-	f, err := os.OpenFile(cfg, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to open %s: %v\n", cfg, err)
-		os.Exit(1)
-	}
-	defer f.Close()
-	_, err = f.WriteString("\n" + snippet + "\n")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to write to %s: %v\n", cfg, err)
-		os.Exit(1)
-	}
-	fmt.Printf("Appended uv-helper snippet to %s\n", cfg)
+	installSnippetToFile(cfg, snippet, yes, backup, force, dryRun)
 }
 
 func mustReadFile(p string) []byte {
@@ -346,6 +303,7 @@ eval ('%s' shell fish "$PWD")
 # <<< uv-helper init <<<`, exe, exe)
 	case "powershell":
 		// PowerShell snippet: use prompt function wrapper to detect directory changes
+		// Use Out-String to convert Object[] output to a single String for Invoke-Expression
 		return fmt.Sprintf(`# >>> uv-helper init >>>
 # added by uv-helper
 $global:__uv_helper_last_dir = $null
@@ -354,12 +312,12 @@ function global:prompt {
   $curDir = (Get-Location).Path
   if ($curDir -ne $global:__uv_helper_last_dir) {
     $global:__uv_helper_last_dir = $curDir
-    Invoke-Expression (& "%s" shell powershell $curDir)
+    $__uv_out = (& "%s" shell powershell $curDir | Out-String); if ($__uv_out.Trim()) { Invoke-Expression $__uv_out }
   }
   if ($global:__uv_helper_orig_prompt) { & $global:__uv_helper_orig_prompt } else { "PS> " }
 }
 # run once for the initial directory
-Invoke-Expression (& "%s" shell powershell $PWD)
+$__uv_out = (& "%s" shell powershell $PWD | Out-String); if ($__uv_out.Trim()) { Invoke-Expression $__uv_out }
 # <<< uv-helper init <<<`, exe, exe)
 	case "cmd":
 		return fmt.Sprintf("rem >>> uv-helper init >>>\nrem added by uv-helper\nrem To use uv-helper in cmd, run: call \"%s\" shell cmd %%CD%%\nrem <<< uv-helper init <<<", exe)
@@ -378,7 +336,18 @@ func uninstallForShell(shell, target string, yes, backup, force, dryRun bool) {
 	case "fish":
 		cfg = filepath.Join(home, ".config", "fish", "config.fish")
 	case "powershell":
-		cfg = filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+		// Uninstall from both Windows PowerShell (5.x) and PowerShell 7+ profiles
+		if target == "" {
+			cfgs := []string{
+				filepath.Join(home, "Documents", "WindowsPowerShell", "Microsoft.PowerShell_profile.ps1"),
+				filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1"),
+			}
+			for _, c := range cfgs {
+				uninstallSnippetFromFile(c, yes, backup, force, dryRun)
+			}
+			return
+		}
+		cfg = expandPath(target)
 	case "cmd":
 		cfg = filepath.Join(home, "_uv_helper_cmd.bat")
 	default:
@@ -389,6 +358,71 @@ func uninstallForShell(shell, target string, yes, backup, force, dryRun bool) {
 		cfg = expandPath(target)
 	}
 
+	if !existsFile(cfg) {
+		fmt.Printf("config file not found: %s\n", cfg)
+		return
+	}
+	uninstallSnippetFromFile(cfg, yes, backup, force, dryRun)
+}
+
+func installSnippetToFile(cfg, snippet string, yes, backup, force, dryRun bool) {
+	// ensure directory exists
+	os.MkdirAll(filepath.Dir(cfg), 0o755)
+
+	// check if already installed
+	if existsFile(cfg) {
+		data, _ := os.ReadFile(cfg)
+		if strings.Contains(string(data), "# >>> uv-helper init >>>") && !force {
+			fmt.Printf("uv-helper already installed in %s (use --force to append anyway)\n", cfg)
+			return
+		}
+	}
+
+	if dryRun || !yes {
+		action := "append"
+		if dryRun {
+			action = "(dry-run) append"
+		}
+		fmt.Printf("Would %s the following snippet to: %s\n---BEGIN SNIPPET---\n%s---END SNIPPET---\n", action, cfg, snippet)
+		if dryRun {
+			return
+		}
+		if !yes {
+			if !confirmPrompt(fmt.Sprintf("Append snippet to %s? [y/N]: ", cfg)) {
+				fmt.Println("Aborted")
+				return
+			}
+		}
+	}
+
+	// create centralized backup if requested
+	if backup && existsFile(cfg) {
+		home, _ := os.UserHomeDir()
+		bdir := filepath.Join(home, ".uv-helper", "backups")
+		_ = os.MkdirAll(bdir, 0o755)
+		ts := time.Now().Format("20060102T150405")
+		base := filepath.Base(cfg)
+		safe := strings.ReplaceAll(base, string(filepath.Separator), "_")
+		bak := filepath.Join(bdir, safe+"."+ts+".bak")
+		_ = os.WriteFile(bak, mustReadFile(cfg), 0o644)
+		fmt.Printf("Backup created: %s\n", bak)
+	}
+
+	f, err := os.OpenFile(cfg, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to open %s: %v\n", cfg, err)
+		os.Exit(1)
+	}
+	defer f.Close()
+	_, err = f.WriteString("\n" + snippet + "\n")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to write to %s: %v\n", cfg, err)
+		os.Exit(1)
+	}
+	fmt.Printf("Appended uv-helper snippet to %s\n", cfg)
+}
+
+func uninstallSnippetFromFile(cfg string, yes, backup, force, dryRun bool) {
 	if !existsFile(cfg) {
 		fmt.Printf("config file not found: %s\n", cfg)
 		return
@@ -432,7 +466,6 @@ func uninstallForShell(shell, target string, yes, backup, force, dryRun bool) {
 		}
 	}
 
-	// centralized backup unless disabled
 	if backup {
 		home, _ := os.UserHomeDir()
 		bdir := filepath.Join(home, ".uv-helper", "backups")
