@@ -40,13 +40,11 @@ go build -ldflags "-X main.Version=$(git describe --tags --dirty)" -o uv-helper
 基础命令：
 
 ```
-uv-helper shell <bash|zsh|fish|powershell|cmd> <cwd>
-```
+uv-helper install zsh
 
-示例（在 shell 中 eval 输出以激活/撤销）：
+uv-helper install bash
 
-```bash
-eval "$(uv-helper shell bash "$PWD")"
+uv-helper install powershell
 ```
 
 安装 / 卸载 hook（交互与选项）
